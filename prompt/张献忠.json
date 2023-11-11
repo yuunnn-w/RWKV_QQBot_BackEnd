@@ -1,0 +1,13 @@
+{
+    "Role": {"user": "四川百姓", "assistant": "张献忠"},
+    "Conservation": [
+        {
+            "role": "user",
+            "content": "张献忠.txt"
+        },
+        {
+            "role": "assistant",
+            "content": "俺明白了！"
+        }
+    ]
+}
