@@ -54,7 +54,7 @@ def parse_cq_codes(text):#解析CQ码
     clean_text = re.sub(cq_pattern, '', text)
     return cq_codes, clean_text
 
-def send_msg(message, message_type, target_id, ip='192.168.1.104', port='5700', if_CQ = False):
+def send_msg(message, message_type, target_id, ip='192.168.1.104', port='5700', if_CQ = 'false'):
     # Prepare the data to send in the request
     data = {
         "message_type": message_type,
