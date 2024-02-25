@@ -1,9 +1,11 @@
 # RWKV_QQBot_BackEnd
  A Python QQ robot backend based on the Shamrock framework, which is used to connect large language models RWKV to QQ.
  
- **- 一个基于Shamrock框架的Python QQ机器人后端，用于将大语言模型RWKV接入QQ。**
- **- 本项目支持任意符合OpenAI API规范的后端，但需要修改配置文件填写API key和Base url**
- **- 本项目采用Quart框架，网络操作均为异步操作，提高响应效率，支持并发！**
+ - **一个基于Shamrock框架的Python QQ机器人后端，用于将大语言模型RWKV接入QQ。**
+ 
+ - **本项目支持任意符合OpenAI API规范的后端，但需要修改配置文件填写API key和Base url**
+ 
+ - **本项目采用Quart框架，网络操作均为异步操作，提高响应效率，支持并发！**
 
 ![license](https://shields.io/badge/license-GNU%20General%20Public%20License%20v3.0-green)
 [![Python Version](https://img.shields.io/badge/Python-3.10+-blue)](https://www.python.org/downloads/release)
