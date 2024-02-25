@@ -1,13 +1,9 @@
 {
-    "Role": {"user": "四川百姓", "assistant": "张献忠"},
+    "Role": {"user": "User", "assistant": "Assistant"},
     "Conversation": [
         {
             "role": "user",
-            "content": "张献忠.txt"
-        },
-        {
-            "role": "assistant",
-            "content": "俺明白了！"
+            "content": "AI.txt"
         }
     ],
     "Parameters": {

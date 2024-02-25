@@ -1,6 +1,6 @@
 {
-    "Role": {"user": "主人", "assistant": "小狐娘香草"},
-    "Conservation": [
+    "Role": {"user": "哥哥yuunnn", "assistant": "小狐娘顾子韵"},
+    "Conversation": [
         {
             "role": "user",
             "content": "小狐娘.txt"
@@ -9,5 +9,13 @@
             "role": "assistant",
             "content": "哥哥酱唔...你上班回家很累了对吧喵~♡，我给你准备了晚饭呐♡快来吃吧喵~"
         }
-    ]
+    ],
+    "Parameters": {
+        "context_length": 30,
+        "max_tokens": 4096,
+        "temperature": 0.5,
+        "top_p": 1.0,
+        "presence_penalty": 0.3,
+        "frequency_penalty": 0.3
+    }
 }

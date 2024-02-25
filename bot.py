@@ -1,166 +1,174 @@
-from flask import Flask, request, jsonify
+from quart import Quart, request, jsonify
 import requests
 import re
 import copy
 from utils import *
 import os
 from gevent import pywsgi
+from openai import AsyncOpenAI
+import asyncio
+import aiohttp
+from aiohttp import web
 
-app = Flask(__name__)
-
-#服务器设置
-SERVER_IP = read_config("Server", "IP")
-SERVER_PORT = int(read_config("Server", "PORT"))
-
-#Prompt设置
-ROLE_CONFIG = load_json(read_config("Prompt", "ROLE_CONFIG"))
-CONSERVATION = ROLE_CONFIG.get('Conservation')
-PROMPT = read_prompt(read_config("Prompt", "ROLE_PROMPT")).strip()
-CONSERVATION[0]["content"] = PROMPT
-NAMES = ROLE_CONFIG.get("Role")
-CONTEXT_LENGTH = int(read_config("Prompt", "CONTEXT_LENGTH"))#上下文长度
-
-#OpenAI接口设置
-URL = read_config("OpenAI", "URL")
-API_KEY = read_config("OpenAI", "API_KEY")
-TOKEN_COUNT = read_config("OpenAI", "TOKEN_COUNT")
-
-#Shamrock框架交互设置
-SHAMROCK_IP = read_config("Shamrock", "IP")
-SHAMROCK_PORT = read_config("Shamrock", "PORT")
-QQ = read_config("Shamrock", "QQ") #这里需要你在配置文件中改成你挂shamrock的QQ号
-
-#Model模型设置
-MAX_TOKENS = int(read_config("Model", "MAX_TOKENS"))
-TEMPERATURE = float(read_config("Model", "TEMPERATURE"))
-TOP_P = float(read_config("Model", "TOP_P"))
-PRESENCE_PENALTY = float(read_config("Model", "PRESENCE_PENALTY"))
-FREQUENCY_PENALTY = float(read_config("Model", "FREQUENCY_PENALTY"))
-PENALTY_DECAY = float(read_config("Model", "PENALTY_DECAY"))
-MODEL = read_config("Model", "MODEL")
-
-Private_Lock = False #全局私聊锁
-conversation = copy.deepcopy(CONSERVATION)
+app = Quart(__name__)
 
 @app.route('/', methods=['POST'])
-def handle_post_request():
-    global Private_Lock
-    global conversation
-    global CONSERVATION
-    global NAMES
+async def handle_post_request():
+    global Gzy_bot
     
-    data = request.get_json()
-    #print(data)
+    data = await request.get_json()
+    print(data)
     if data is not None:
-        try:
-            cq_codes, message = parse_cq_codes(data['message'])
-        except:
-            return 'OK', 200
-        
-        message_id = data['message_id']
-        message_type = data['message_type']
+        message_id = data.get('message_id')
+        user_id = data.get("user_id")
+        message_type = data.get('message_type')
+        if not message_type:
+            return "None", 200
         
         if message_type == 'private':
             target_id = data['user_id']
-            if message.strip() == 'lock on':#如果接收到lock on的私聊消息，就开启私聊锁，此时只能进行私聊对话
-                Private_Lock = True
-                send_msg('LOCK ON', message_type, target_id)
-                return 'OK', 200
-            elif message.strip() == 'lock off':#关闭私聊锁
-                Private_Lock = False
-                send_msg('LOCK OFF', message_type, target_id)
-                return 'OK', 200
-            
         elif message_type == 'group':
-            if (f'[CQ:at,qq={QQ}]' not in cq_codes) or Private_Lock:
-                if Private_Lock and f'[CQ:at,qq={QQ}]' in cq_codes:
-                    send_msg('很抱歉，管理员已暂停本AI服务，请联系管理员解除锁定。', message_type, data['group_id'])
-                return 'Pause Service!', 200
-            else:
-                target_id = data['group_id']
-                
-        if message.strip() == 'clean' or len(conversation) > CONTEXT_LENGTH:
-            conversation = copy.deepcopy(CONSERVATION)
-            send_msg('已成功清除上下文！', message_type, target_id, ip=SHAMROCK_IP, port=SHAMROCK_PORT)
-            return 'Done', 200
+            target_id = data['group_id']
+        else:
+            return "None", 200
+        
+        try:
+            cq_codes, message = parse_cq_codes(data['message'])
+            # 尝试解析CQ码
+        except:
+            return 'Error of parsing cq codes', 200
             
-        elif message.strip() == 'help':
-            send_msg('指令：\n1.clean（清除上下文）\n2.list（用于查看可切换的角色）3.switch（用于切换角色）\n\n切换角色指令示例：“switch 顾子韵”',\
-                     message_type, target_id, ip=SHAMROCK_IP, port=SHAMROCK_PORT)
+        
+        if (f'[CQ:at,qq={Gzy_bot.qq}]' not in cq_codes) and message_type != 'private':
+            # 如果不是艾特信息，且不是私聊信息
+            # 直接返回
+            return "None", 200
+        else:
+            if not Gzy_bot.check_existence(target_id):
+                Gzy_bot.register_conversation_manager(target_id, message_type)
+                # 如果不存在，就注册一个新对话管理器
+        
+        
+        conversation_manager = Gzy_bot.conversation_map.get(target_id)
+        # 取出本次聊天的对话管理器
+        
+        if message.strip() == 'lock on':
+            print(user_id, Gzy_bot.admin)
+            if str(user_id) == str(Gzy_bot.admin):
+                Gzy_bot.private_lock = True
+                await send_msg('上锁成功，现在仅限私聊对话。', message_type, target_id, 
+                               ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
+                return 'Done', 200
+            else:
+                await send_msg(f'大叔~你没有权限喔，只有我的主人 [CQ:at,qq={Gzy_bot.admin}] 有权限~杂鱼~杂鱼❤', 
+                               message_type, target_id, ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
+                return 'Done', 200
+            
+        elif message.strip() == 'lock off':
+            if str(user_id) == str(Gzy_bot.admin):
+                Gzy_bot.private_lock = False
+                await send_msg('解锁成功，开始提供群聊服务。', message_type, target_id, 
+                               ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
+                return 'Done', 200
+            else:
+                await send_msg(f'大叔~你没有权限喔，只有我的主人 [CQ:at,qq={Gzy_bot.admin}] 有权限~杂鱼~杂鱼❤', 
+                               message_type, target_id, ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
+                return 'Done', 200
+            
+        elif message.strip() == 'clean' or len(conversation_manager.conversation) > conversation_manager.context_length:
+            conversation_manager.conversation = copy.deepcopy(conversation_manager.conversation_init)
+            await send_msg('已成功清除上下文！', message_type, target_id, 
+                           ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
             return 'Done', 200
         
-        elif message.strip().split()[0] == 'switch':
-            if os.path.exists(f'./prompt/{message.strip().split()[1]}.json') and os.path.exists(f'./prompt/{message.strip().split()[1]}.txt'):
-                ROLE_CONFIG = load_json(f'./prompt/{message.strip().split()[1]}.json')
-                CONSERVATION = ROLE_CONFIG.get('Conservation')
-                PROMPT = read_prompt(f'./prompt/{message.strip().split()[1]}.txt').strip()
-                CONSERVATION[0]["content"] = PROMPT
-                NAMES = ROLE_CONFIG.get("Role")
-                conversation = copy.deepcopy(CONSERVATION)
-                send_msg(f"角色切换为【{message.strip().split()[1]}】成功！", message_type, target_id, ip=SHAMROCK_IP, port=SHAMROCK_PORT)
-                return 'Done', 200
-            else:
-                send_msg(f"角色【{message.strip().split()[1]}】不存在！", message_type, target_id, ip=SHAMROCK_IP, port=SHAMROCK_PORT)
-                return 'Done', 200
-            
+        elif message.strip() == 'help':
+            await send_msg('指令：\n1.clean（清除上下文）\n2.list（用于查看可切换的角色）3.switch（用于切换角色）\n4.lock on 关闭群聊服务 lock off 开启群聊服务\n\n切换角色指令示例：“switch 顾子韵”', \
+                     message_type, target_id, ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
+            return 'Done', 200
+        
         elif message.strip() == 'list':
             complete_roles = check_complete_config("./prompt")
             formatted_roles = format_role_list(complete_roles)
-            send_msg(formatted_roles, message_type, target_id, ip=SHAMROCK_IP, port=SHAMROCK_PORT)
+            await send_msg(formatted_roles, message_type, target_id, ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
             return 'Done', 200
         
+        elif message.strip().split()[0] == 'switch':
+            if os.path.exists(f'./prompt/{message.strip().split()[1]}.json') and os.path.exists(
+                    f'./prompt/{message.strip().split()[1]}.txt'):
+                
+                #Prompt设置
+                ROLE_CONFIG = load_json(f'./prompt/{message.strip().split()[1]}.json')
+                CONVERSATION = ROLE_CONFIG.get("Conversation")
+                PROMPT = read_prompt(f'./prompt/{message.strip().split()[1]}.txt').strip()
+                CONVERSATION[0]["content"] = PROMPT
+                NAMES = ROLE_CONFIG.get("Role")
+
+                # 参数设置
+                CONTEXT_LENGTH = int(ROLE_CONFIG.get("Parameters").get("context_length"))#上下文长度
+                MAX_TOKENS = int(ROLE_CONFIG.get("Parameters").get("max_tokens"))#最大返回token
+                TEMPERATURE = float(ROLE_CONFIG.get("Parameters").get("temperature"))
+                TOP_P = float(ROLE_CONFIG.get("Parameters").get("top_p"))
+                PRESENCE_PENALTY = float(ROLE_CONFIG.get("Parameters").get("presence_penalty"))
+                FREQUENCY_PENALTY = float(ROLE_CONFIG.get("Parameters").get("frequency_penalty"))
+
+                manager = ConversationManager(target_id = target_id, 
+                                              type = message_type, 
+                                              conversation_init = CONVERSATION, 
+                                              conversation = CONVERSATION, 
+                                              names = NAMES, 
+                                              context_length = CONTEXT_LENGTH, 
+                                              max_tokens = MAX_TOKENS, 
+                                              temperature = TEMPERATURE, 
+                                              top_p = TOP_P, 
+                                              presence_penalty = PRESENCE_PENALTY, 
+                                              frequency_penalty = FREQUENCY_PENALTY, 
+                                              model = Gzy_bot.default.model)
+                del Gzy_bot.conversation_map[target_id] 
+                Gzy_bot.conversation_map[target_id]= manager
+                await send_msg(f"角色切换为【{message.strip().split()[1]}】成功！", message_type,
+                               target_id, ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
+                return 'Done', 200
+            else:
+                await send_msg(f"角色【{message.strip().split()[1]}】不存在！", message_type, target_id, 
+                               ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
+                return 'Done', 200
         else:
-            conversation.append({"role": "user", "content": message})
-            #如果需要对接OpenAI api接口，需要删除一些参数，需要删掉"stop"和"penalty_decay"以及"names"
-            #"stop"、"penalty_decay"、"names"这三个参数是ai00 rwkv server特有的
-            payload = {
-                "messages": conversation,
-                "max_tokens": MAX_TOKENS,
-                "temperature": TEMPERATURE,
-                "top_p": TOP_P,
-                "presence_penalty": PRESENCE_PENALTY,
-                "frequency_penalty": FREQUENCY_PENALTY,
-                "penalty_decay": PENALTY_DECAY,
-                "stop": ["\n\n","\nUser:","User:"],
-                "stream": False,
-                "model": MODEL,
-                "names": NAMES, #该参数用于映射对话人物姓名，加深催眠效果
-                #"logit_bias":{261:-1}
-            }
-            #print(payload)
-            """
-            proxy_dict = {
-                "http": "http://127.0.0.1:7890",
-                "https": "http://127.0.0.1:7890",
-            }
-            """
-            #暂时废弃掉的代理
-            response = call_openai_api(payload, URL, API_KEY)#, proxy_dict)
-            if "error" in response:
-                return_message = f"Error: {response['error']}".strip()
-                print(f"Error: {response['error']}")
-                send_msg(return_message, message_type, target_id, ip=SHAMROCK_IP, port=SHAMROCK_PORT)
+            if Gzy_bot.private_lock:
+                await send_msg(f'大叔，我的主人已经把我关掉了喔！你可以去找我的主人求他解锁喵~ [CQ:at,qq={Gzy_bot.admin}] ', 
+                               message_type, target_id, ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
+                return 'Done', 200
+            #await send_msg(f"Hello World!", message_type, target_id, ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
+            conversation_manager.conversation.append({"role": "user", "content": message})
+            response = await get_openai_completion(client = Gzy_bot.client,
+                                                   messages = conversation_manager.conversation,
+                                                   model = conversation_manager.model,
+                                                   frequency_penalty = conversation_manager.frequency_penalty,
+                                                   presence_penalty = conversation_manager.presence_penalty,
+                                                   max_tokens = conversation_manager.max_tokens,
+                                                   temperature = conversation_manager.temperature,
+                                                   top_p = conversation_manager.top_p)
+            if not response:
+                return_message = f"Failed to call the OpenAI API".strip()
+                await send_msg(return_message, message_type, target_id, ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
                 return jsonify(response), 200
             else:
-                return_message = f"{response['choices'][0]['message']['content']}".strip()
-                print("RWKV5:", return_message) #打印模型返回信息
-                token_usage = int(response.get('usage').get('total_tokens')) #这里计算消耗的token数目
-                update_token_count(file_name = TOKEN_COUNT, token_count = token_usage)
-                #计算token
+                return_message = f"{response.choices[0].message.content}".strip()
+                print("语言模型返回：", return_message)
 
-            # Append the assistant's response to the conversation
-            conversation.append({"role": "assistant", "content": return_message})
-            if message_type == 'private':#回复私聊不需要reply
+            conversation_manager.conversation.append({"role": "assistant", "content": return_message})
+            print(conversation_manager.conversation)
+            if message_type == 'private':
                 reply = ''
             else:
                 reply = f'[CQ:reply,id={message_id}]'
-            response = send_msg(reply+return_message, message_type, target_id, ip=SHAMROCK_IP, port=SHAMROCK_PORT)
-            #向Shamrock发送消息
-            return "Successfully Send!", 200
-    else:
-        return "Invalid JSON data received", 400  # Return a 400 Bad Request response if the data is not valid JSON
-
+            await send_msg(reply + return_message, message_type, target_id, 
+                           ip=Gzy_bot.shamrock_ip, port=Gzy_bot.shamrock_port)
+            
+            return 'Done', 200
+        
 if __name__ == '__main__':
-    #app.run(host = SERVER_IP, port = SERVER_PORT)
-    server = pywsgi.WSGIServer((SERVER_IP, SERVER_PORT), app)
-    server.serve_forever()
+    Gzy_bot = load_config()
+    Gzy_bot.print_parameters()
+    app.run(host = Gzy_bot.ip, port = Gzy_bot.port)
+    #server = pywsgi.WSGIServer((Gzy_bot.ip, Gzy_bot.port), app)
+    #server.serve_forever()

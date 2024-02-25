@@ -6,7 +6,7 @@
 ![license](https://shields.io/badge/license-GNU%20General%20Public%20License%20v3.0-green)
 [![Python Version](https://img.shields.io/badge/Python-3.10+-blue)](https://www.python.org/downloads/release)
 
-![GitHub last commit](https://img.shields.io/github/last-commit/JiaXinSugar-114514/RWKV_QQBot_BackEnd)
+![GitHub last commit](https://img.shields.io/github/last-commit/yuunnn-w/RWKV_QQBot_BackEnd)
 
 ***
 
@@ -21,6 +21,14 @@
 ### 2. 配置Shamrock
 
 在Shamrock配置文件中添加上报HTTP服务器的IP和Port等配置选项。IP需要填写运行本Bot的机器的IP和Port。作者在内网环境下运行Bot和Shamrock框架，所以填写的是内网IP。
+
+注意，Shamrock中的一些重要的配置如下：
+1. 主动HTTP端口填写5700（即本Bot去访问Shamrock的端口）。
+2. 回调HTTP地址填写本Bot运行的地址和端口（端口默认5701）。
+3. 开启OneBot标准的HTTPAPI回调选项。
+4. 开启HTTPAPI回调的消息格式选项。
+5. 推荐开启强制QQ使用平板模式选项。
+
 
 ### 3. 克隆项目
 
@@ -47,15 +55,23 @@ pip install -r requirements.txt
 
 请参考[AI00 RWKV Server](https://github.com/cgisky1980/ai00_rwkv_server)进行安装。
 
-**RWKV模型下载：**  
+**RWKV5模型下载：**  
 1.5B大小的模型：[RWKV-5-World-1B5-v2-20231025-ctx4096.pth](https://huggingface.co/BlinkDL/rwkv-5-world/blob/main/RWKV-5-World-1B5-v2-20231025-ctx4096.pth)  
-3B大小的模型：[RWKV-5-World-3B-v2-OnlyForTest_86%25_trained-20231108-ctx4096.pth](https://huggingface.co/BlinkDL/temp/blob/main/RWKV-5-World-3B-v2-OnlyForTest_86%25_trained-20231108-ctx4096.pth)  
-  
-其中3B在fp16量化下约占7.5G显存，如果你的显存在6-8G，可以选用3B的模型。如果显存小于等于4G，建议采用1.5B的模型。目前AI00 RWKV Server支持fp16、int8量化，NF4量化功能正在开发中。   
-  
-**如果你的显存大于8G，那么你可以选择7B大小的模型[RWKV-5-World-7B-v2-OnlyForTest_39%25_trained-20231106-ctx4096.pth](https://huggingface.co/BlinkDL/temp/blob/main/RWKV-5-World-7B-v2-OnlyForTest_39%25_trained-20231106-ctx4096.pth)。注意你需要在ai00中指定int8量化，量化方法是把 `ai00_rwkv_server/assets/configs/Config.toml` 配置文件中的quant项改为28即可。如果实在搞不清楚就用3B模型就OK。**  
+3B大小的模型：[RWKV-5-World-3B-v2-20231118-ctx16k.pth](https://huggingface.co/BlinkDL/rwkv-5-world/resolve/main/RWKV-5-World-3B-v2-20231118-ctx16k.pth?download=true)     
+7B大小的模型：[RWKV-5-World-7B-v2-20240128-ctx4096.pth](https://huggingface.co/BlinkDL/rwkv-5-world/resolve/main/RWKV-5-World-7B-v2-20240128-ctx4096.pth?download=true)。
 
-**AI00要求模型格式为.st结尾的safetensors格式权重，你可以运行 `ai00_rwkv_server/convert_safetensors.py` 脚本来将.pth格式的模型权重转换为.st格式的权重**
+**如果你的显存大于等于8G，上面三个模型你都可以直接运行。但你需要在ai00中指定NF4量化，量化方法是把 `ai00_rwkv_server/assets/configs/Config.toml` 配置文件中的quant项改为26，然后将quant_type选项改为NF4即可。**  
+
+```
+# 配置文件修改示例
+quant = 0
+quant_type = "NF4"
+```
+
+**AI00要求模型格式为.st结尾的safetensors格式权重，你可以运行 `converter.exe` 脚本来将.pth格式的模型权重转换为.st格式的权重，例如：**
+```
+converter.exe --input RWKV-5-World-7B-v2-20240128-ctx4096.pth
+```
 
 ### 7. 添加Prompt
 
@@ -75,8 +91,7 @@ python bot.py
 ```
 这里的QQbot是QQ机器人账号的昵称。
 
-**另，在私聊对话中直接输入 `lock on` 可以给bot上锁，此时bot只会响应私聊对话，拒绝群聊对话。再次输入 `lock off` 可以解锁。**  
-**~~（PS：这个功能可以防止你在偷偷私聊涩涩时被群友抓到哦~杂鱼♡）~~**
+**另，输入 `lock on` 可以给bot上锁，此时bot只会响应私聊对话，拒绝群聊对话。再次输入 `lock off` 可以解锁。注意，这个功能仅限配置文件中指定的Admin_QQ账号使用。**  
 
 ***
 

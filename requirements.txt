@@ -1,5 +1,6 @@
-flask
+quart
 configparser
 gevent
 requests
-
+openai
+aiohttp
